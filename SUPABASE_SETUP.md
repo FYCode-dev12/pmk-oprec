@@ -180,7 +180,10 @@ alter table storage.objects enable row level security;
 create policy "Anyone can upload files"
   on storage.objects for insert
   to anon, authenticated
-  with check (bucket_id = 'recruitment-files');
+  with check (
+    bucket_id = 'recruitment-files' AND
+    (storage.extension(name) = 'pdf')
+  );
 
 -- Allow anyone to read files (required because getPublicUrl is used to view assets)
 create policy "Anyone can view files"

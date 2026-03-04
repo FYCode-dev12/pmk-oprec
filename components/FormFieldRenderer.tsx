@@ -122,14 +122,28 @@ export function FormFieldRenderer({ fieldConfig, control }: FormFieldRendererPro
                                         );
                                     case 'file_upload':
                                         return (
-                                            <Input
-                                                type="file"
-                                                onChange={(e) => {
-                                                    const file = e.target.files?.[0];
-                                                    if (file) field.onChange(file);
-                                                }}
-                                                className="bg-white file:mr-4 file:py-1 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer w-full text-muted-foreground"
-                                            />
+                                            <div className="flex flex-col gap-2 w-full mt-2">
+                                                <Input
+                                                    type="file"
+                                                    accept=".pdf,application/pdf"
+                                                    onChange={(e) => {
+                                                        const file = e.target.files?.[0];
+                                                        if (file) field.onChange(file);
+                                                    }}
+                                                    className="bg-white file:mr-4 file:py-1 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer w-full text-muted-foreground"
+                                                />
+                                                {field.value instanceof File && (
+                                                    <div className="inline-flex items-center gap-2 mt-1 px-3 py-1.5 bg-green-50 text-green-700 text-xs font-medium rounded-md border border-green-200 shadow-sm w-fit">
+                                                        <svg className="w-4 h-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                        <span className="truncate max-w-[200px]">{field.value.name}</span>
+                                                        <span className="opacity-75">
+                                                            ({(field.value.size / (1024 * 1024)).toFixed(2)} MB)
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
                                         );
                                     default:
                                         return <Input {...field} value={field.value || ''} className="bg-white" />;

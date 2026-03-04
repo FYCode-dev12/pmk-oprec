@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import { uploadFile } from "@/app/actions/uploadFile";
 import { createClient } from "@/lib/supabase/client";
 import { FormFieldRenderer, FieldConfig } from "./FormFieldRenderer";
 import { Form } from "@/components/ui/form";
@@ -59,7 +60,13 @@ export function RecruitmentForm({ recruitment }: { recruitment: any }) {
     allFields.forEach((field) => {
         let validator;
         if (field.type === "file_upload") {
-            validator = z.any();
+            validator = z.custom<File>().refine(
+                (file) => !file || file.type === 'application/pdf',
+                { message: 'File harus berformat PDF' }
+            ).refine(
+                (file) => !file || file.size <= 5 * 1024 * 1024,
+                { message: 'Ukuran file maksimal 5 MB' }
+            );
             if (field.required) {
                 validator = validator.refine((file) => file !== undefined && file !== null, {
                     message: `${field.label} wajib diupload.`,
@@ -111,23 +118,20 @@ export function RecruitmentForm({ recruitment }: { recruitment: any }) {
 
                 if (field.type === "file_upload" && values[field.id]) {
                     const file = values[field.id] as File;
-                    const fileName = `${recruitment.id}/${values.applicant_nim}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
 
-                    const { error } = await supabase.storage
-                        .from("recruitment-files")
-                        .upload(fileName, file);
+                    const formData = new FormData();
+                    formData.append("file", file);
+                    formData.append("recruitmentId", recruitment.id);
+                    formData.append("applicantNim", values.applicant_nim);
 
-                    if (error) {
-                        console.error("Upload error", error);
-                        throw new Error(`Gagal mengupload file ${field.label}`);
+                    const result = await uploadFile(formData);
+
+                    if (!result.success || !result.url) {
+                        throw new Error(result.error || `Gagal mengupload file ${field.label}`);
                     }
 
-                    const { data: { publicUrl } } = supabase.storage
-                        .from("recruitment-files")
-                        .getPublicUrl(fileName);
-
-                    fileUrls.push(publicUrl);
-                    answers[field.label] = publicUrl; // Keep a reference in answers too
+                    fileUrls.push(result.url);
+                    answers[field.label] = result.url; // Keep a reference in answers too
                 } else {
                     answers[field.label] = values[field.id];
                 }
@@ -171,18 +175,18 @@ export function RecruitmentForm({ recruitment }: { recruitment: any }) {
 
             <Card className="border-t-8 border-t-accent shadow-xl bg-[#FAF6F0] rounded-3xl overflow-hidden">
                 <CardHeader className="bg-white pb-8 border-b border-border/50">
-                <div className="w-full flex items-center justify-center">
-                    <div className="relative w-32 h-32 md:w-40 md:h-40 mb-2 rounded-full border-4 border-accent shadow-lg bg-white flex items-center justify-center p-2 z-10 overflow-hidden">
-                    <Image
-                        src="https://res.cloudinary.com/dm3zixaz4/image/upload/v1772567328/PMK_LOGO-removebg-preview_oydcdq.avif"
-                        alt="PMK ITERA Logo"
-                        width={150}
-                        height={150}
-                        className="object-contain"
-                        priority
-                    />
-                </div>
-                </div>
+                    <div className="w-full flex items-center justify-center">
+                        <div className="relative w-32 h-32 md:w-40 md:h-40 mb-2 rounded-full border-4 border-accent shadow-lg bg-white flex items-center justify-center p-2 z-10 overflow-hidden">
+                            <Image
+                                src="https://res.cloudinary.com/dm3zixaz4/image/upload/v1772567328/PMK_LOGO-removebg-preview_oydcdq.avif"
+                                alt="PMK ITERA Logo"
+                                width={150}
+                                height={150}
+                                className="object-contain"
+                                priority
+                            />
+                        </div>
+                    </div>
                     <CardTitle className="font-serif text-3xl md:text-4xl text-primary font-bold">{recruitment.title}</CardTitle>
                     <CardDescription className="text-base text-foreground/80 mt-4 whitespace-pre-wrap leading-relaxed">
                         {recruitment.description}
