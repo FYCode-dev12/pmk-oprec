@@ -7,9 +7,14 @@ import { Button } from "@/components/ui/button";
 
 export const revalidate = 0;
 
-export default async function ApplicantsPage({ params }: { params: { id: string } }) {
+export default async function ApplicantsPage({ params, searchParams }: { params: { id: string }, searchParams: { [key: string]: string | string[] | undefined } }) {
     const supabase = createClient();
     const id = params.id;
+
+    const page = typeof searchParams.page === 'string' ? parseInt(searchParams.page, 10) : 1;
+    const limit = 10;
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
 
     const { data: recruitment } = await supabase
         .from("recruitments")
@@ -19,11 +24,20 @@ export default async function ApplicantsPage({ params }: { params: { id: string 
 
     if (!recruitment) notFound();
 
+    // Fetch total count for pagination
+    const { count } = await supabase
+        .from("submissions")
+        .select("id", { count: "exact", head: true })
+        .eq("recruitment_id", id);
+
+    const totalPages = count ? Math.ceil(count / limit) : 1;
+
     const { data: submissions } = await supabase
         .from("submissions")
-        .select("*")
+        .select("id, applicant_name, applicant_email, applicant_nim, submitted_at, answers, files")
         .eq("recruitment_id", id)
-        .order("submitted_at", { ascending: false });
+        .order("submitted_at", { ascending: false })
+        .range(from, to);
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -42,7 +56,13 @@ export default async function ApplicantsPage({ params }: { params: { id: string 
                 </p>
             </div>
 
-            <ApplicantTable submissions={submissions || []} recruitmentTitle={recruitment.title} />
+            <ApplicantTable
+                submissions={submissions || []}
+                recruitmentTitle={recruitment.title}
+                recruitmentId={id}
+                currentPage={page}
+                totalPages={totalPages}
+            />
         </div>
     );
 }

@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Switch } from "@/components/ui/switch";
 import { createClient } from "@/lib/supabase/client";
+import { revalidateAdminData } from "@/app/actions/revalidate";
+
 
 export function RecruitmentToggle({ id, initialStatus }: { id: string, initialStatus: boolean }) {
     const [isOpen, setIsOpen] = useState(initialStatus);
@@ -24,6 +26,12 @@ export function RecruitmentToggle({ id, initialStatus }: { id: string, initialSt
         if (error) {
             alert("Gagal mengubah status: " + error.message);
             setIsOpen(!checked); // revert
+        } else {
+            // Revalidate cache since we made a mutation
+            await revalidateAdminData();
+            // We can't easily revalidate the specific recruitment page because we don't have the slug here,
+            // but revalidateAdminData revalidates the dashboard.
+            // A more robust way would be fetching the slug, but refreshing the dashboard is good for now.
         }
         setLoading(false);
     };

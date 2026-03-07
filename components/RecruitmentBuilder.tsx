@@ -16,7 +16,9 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import Link from "next/link";
-import { QRCodeCard } from "./QRCodeCard";
+import dynamic from "next/dynamic";
+const QRCodeCard = dynamic(() => import("./QRCodeCard").then((mod) => mod.QRCodeCard), { ssr: false });
+import { revalidateRecruitment, revalidateAdminData } from "@/app/actions/revalidate";
 
 function SortableFieldItem({ field, updateField, removeField }: { field: FieldConfig, updateField: (id: string, updates: Partial<FieldConfig>) => void, removeField: (id: string) => void }) {
     const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: field.id });
@@ -114,6 +116,8 @@ export function RecruitmentBuilder({ initialData }: { initialData?: any }) {
     const [template, setTemplate] = useState(initialData?.template_type || "Custom");
     const [fields, setFields] = useState<FieldConfig[]>(initialData?.form_fields || []);
     const [isOpen, setIsOpen] = useState(initialData ? initialData.is_open : true);
+    const [allowedAngkatan, setAllowedAngkatan] = useState<string>(initialData?.allowed_angkatan?.join(', ') || "2024");
+    const [waGroupLink, setWaGroupLink] = useState(initialData?.wa_group_link || "");
 
     const [isSaving, setIsSaving] = useState(false);
     const [savedUrl, setSavedUrl] = useState("");
@@ -161,6 +165,18 @@ export function RecruitmentBuilder({ initialData }: { initialData?: any }) {
             return;
         }
 
+        if (waGroupLink && !waGroupLink.includes('chat.whatsapp.com')) {
+            alert("Link Grup WhatsApp tidak valid. Harus menggunakan link chat.whatsapp.com.");
+            return;
+        }
+
+        const parsedAngkatan = allowedAngkatan.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+
+        if (parsedAngkatan.length === 0) {
+            alert("Minimal masukkan 1 angkatan yang diperbolehkan mendaftar!");
+            return;
+        }
+
         setIsSaving(true);
         const slug = initialData?.slug || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
 
@@ -172,7 +188,9 @@ export function RecruitmentBuilder({ initialData }: { initialData?: any }) {
             open_date: new Date(openDate).toISOString(),
             close_date: new Date(closeDate).toISOString(),
             form_fields: fields,
-            template_type: template
+            template_type: template,
+            allowed_angkatan: parsedAngkatan,
+            wa_group_link: waGroupLink || null,
         };
 
         let res;
@@ -187,6 +205,10 @@ export function RecruitmentBuilder({ initialData }: { initialData?: any }) {
         if (res.error) {
             alert("Gagal menyimpan: " + res.error.message);
         } else {
+            // Revalidate cached paths
+            await revalidateRecruitment(slug);
+            await revalidateAdminData();
+
             const baseUrl = window.location.origin;
             setSavedUrl(`${baseUrl}/recruitment/${slug}`);
             window.scrollTo({ top: 0, behavior: "smooth" });
@@ -272,6 +294,39 @@ export function RecruitmentBuilder({ initialData }: { initialData?: any }) {
                                 <Label className="font-bold text-foreground">Tgl Tutup <span className="text-destructive">*</span></Label>
                                 <Input type="date" value={closeDate} onChange={e => setCloseDate(e.target.value)} className="bg-[#FAF6F0] rounded-xl" />
                             </div>
+                        </div>
+
+                        <div className="space-y-3 pt-4 border-t border-accent/20">
+                            <Label className="font-bold text-foreground">Angkatan yang Diperbolehkan Mendaftar</Label>
+                            <p className="text-xs text-muted-foreground leading-relaxed">
+                                Masukkan 4 digit angkatan, pisahkan dengan koma (contoh: 2024, 2025).
+                            </p>
+                            <Input
+                                value={allowedAngkatan}
+                                onChange={e => setAllowedAngkatan(e.target.value)}
+                                placeholder="2024, 2025"
+                                className="bg-[#FAF6F0] border-accent/30 focus-visible:ring-accent rounded-xl"
+                            />
+                        </div>
+
+                        <div className="space-y-3 pt-4 border-t border-accent/20">
+                            <Label className="font-bold text-foreground">Link Grup WhatsApp <span className="text-muted-foreground font-normal">(Opsional)</span></Label>
+                            <p className="text-xs text-muted-foreground leading-relaxed">
+                                Link ini akan ditampilkan kepada pendaftar setelah berhasil mendaftar (Halaman Success).
+                            </p>
+                            <Input
+                                type="url"
+                                value={waGroupLink}
+                                onChange={e => setWaGroupLink(e.target.value)}
+                                placeholder="https://chat.whatsapp.com/xxxxxx"
+                                className="bg-[#FAF6F0] border-accent/30 focus-visible:ring-accent rounded-xl"
+                            />
+                            {waGroupLink && waGroupLink.includes('chat.whatsapp.com') && (
+                                <div className="mt-4 flex flex-col items-center p-4 bg-white rounded-xl border-2 border-dashed border-accent/50 shadow-sm">
+                                    <p className="text-sm font-semibold text-primary mb-3">Preview QR Code WhatsApp</p>
+                                    <QRCodeCard url={waGroupLink} title="Group WhatsApp" hideLink={true} hideIcon={true} />
+                                </div>
+                            )}
                         </div>
                     </CardContent>
                 </Card>

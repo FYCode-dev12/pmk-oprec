@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { uploadFile } from "@/app/actions/uploadFile";
 import { createClient } from "@/lib/supabase/client";
+import { revalidateAdminData } from "@/app/actions/revalidate";
 import { FormFieldRenderer, FieldConfig } from "./FormFieldRenderer";
 import { Form } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
@@ -95,10 +96,76 @@ export function RecruitmentForm({ recruitment }: { recruitment: any }) {
         schemaShape[field.id] = validator;
     });
 
-    const formSchema = z.object(schemaShape);
+    const formSchema = z.object(schemaShape).superRefine((data, ctx) => {
+        const allowedAngkatan = recruitment.allowed_angkatan || [2024];
+        let isAngkatanValid = false;
+
+        // 1. Validasi Angkatan
+        if (data.angkatan) {
+            const angkatanVal = parseInt(String(data.angkatan));
+            if (!allowedAngkatan.includes(angkatanVal)) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: `Angkatan ${String(data.angkatan)} tidak termasuk yang diperbolehkan mendaftar.`,
+                    path: ["angkatan"],
+                });
+            } else {
+                isAngkatanValid = true;
+            }
+        }
+
+        // 2. Validasi NIM
+        if (data.applicant_nim) {
+            const nimStr = String(data.applicant_nim);
+
+            if (!/^[0-9]{9}$/.test(nimStr)) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: "Format NIM tidak valid (harus 9 digit angka).",
+                    path: ["applicant_nim"],
+                });
+            } else if (isAngkatanValid && data.angkatan) {
+                const angkatanSuffix = String(data.angkatan).substring(2, 4); // Misal: "24" dari "2024"
+                const nimSuffix = nimStr.substring(1, 3); // Misal: "24" dari "124"
+
+                if (angkatanSuffix !== nimSuffix) {
+                    ctx.addIssue({
+                        code: z.ZodIssueCode.custom,
+                        message: "NIM kamu tidak sesuai dengan Angkatan yang dimasukkan.",
+                        path: ["applicant_nim"],
+                    });
+                }
+            }
+        }
+
+        // 3. Validasi Email ITERA
+        if (data.applicant_email) {
+            const emailStr = String(data.applicant_email);
+            const emailRegex = /^[a-zA-Z]+\.[0-9]{9}@student\.itera\.ac\.id$/;
+
+            if (!emailRegex.test(emailStr)) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: "Gunakan email ITERA: namaDepan.nim@student.itera.ac.id",
+                    path: ["applicant_email"],
+                });
+            } else if (data.applicant_nim) {
+                const emailNimMatch = emailStr.match(/\.([0-9]{9})@/);
+                if (emailNimMatch && emailNimMatch[1] !== data.applicant_nim) {
+                    ctx.addIssue({
+                        code: z.ZodIssueCode.custom,
+                        message: "NIM pada email harus sama dengan NIM yang diinput.",
+                        path: ["applicant_email"],
+                    });
+                }
+            }
+        }
+    });
 
     const form = useForm({
         resolver: zodResolver(formSchema),
+        mode: "onSubmit",
+        reValidateMode: "onSubmit",
         defaultValues: {},
     });
 
@@ -106,6 +173,18 @@ export function RecruitmentForm({ recruitment }: { recruitment: any }) {
     const onSubmit = async (values: any) => {
         setIsSubmitting(true);
         try {
+            // 0. Cek apakah NIM sudah pernah mendaftar di recruitment ini
+            const { count, error: countError } = await supabase
+                .from("submissions")
+                .select("id", { count: 'exact', head: true })
+                .eq("recruitment_id", recruitment.id)
+                .eq("applicant_nim", values.applicant_nim);
+
+            if (countError) throw new Error("Gagal memvalidasi data pendaftar.");
+            if (count && count > 0) {
+                throw new Error(`NIM ${values.applicant_nim} sudah terdaftar pada rekrutmen ini.`);
+            }
+
             // 1. Upload files first
             const fileUrls: string[] = [];
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -153,7 +232,10 @@ export function RecruitmentForm({ recruitment }: { recruitment: any }) {
                 throw new Error("Gagal menyimpan data pendaftaran.");
             }
 
-            // 3. Redirect to success
+            // 3. Revalidate dashboard stats
+            await revalidateAdminData(recruitment.id);
+
+            // 4. Redirect to success
             router.push(`/recruitment/${recruitment.slug}/success`);
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any

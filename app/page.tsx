@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
-import { GoldenParticles } from "@/components/GoldenParticles";
+import dynamic from "next/dynamic";
+const GoldenParticles = dynamic(() => import("@/components/GoldenParticles").then((mod) => mod.GoldenParticles), { ssr: false });
 import { BibleVerseBanner } from "@/components/BibleVerseBanner";
 import { RecruitmentCard } from "@/components/RecruitmentCard";
 
@@ -12,7 +13,7 @@ export default async function LandingPage() {
   // Fetch only open recruitments
   const { data: recruitments } = await supabase
     .from("recruitments")
-    .select("*")
+    .select("id, slug, title, description, close_date, is_open")
     .eq("is_open", true)
     .order("close_date", { ascending: true });
 

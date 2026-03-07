@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { RecruitmentForm } from "@/components/RecruitmentForm";
-import { GoldenParticles } from "@/components/GoldenParticles";
+import dynamic from "next/dynamic";
+const GoldenParticles = dynamic(() => import("@/components/GoldenParticles").then((mod) => mod.GoldenParticles), { ssr: false });
 import { notFound } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import Link from "next/link";
@@ -16,7 +17,7 @@ export default async function RecruitmentPage({ params }: { params: { slug: stri
 
     const { data: recruitment } = await supabase
         .from("recruitments")
-        .select("*")
+        .select("id, title, description, is_open, close_date, template_type, form_fields, allowed_angkatan, slug")
         .eq("slug", slug)
         .single();
 

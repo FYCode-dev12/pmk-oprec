@@ -1,11 +1,12 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { useEffect, useState } from "react";
 
 interface Particle {
     id: number;
     x: number;
+    y: number;
     size: number;
     duration: number;
     delay: number;
@@ -13,18 +14,26 @@ interface Particle {
 
 export function GoldenParticles() {
     const [particles, setParticles] = useState<Particle[]>([]);
+    const shouldReduceMotion = useReducedMotion();
 
     useEffect(() => {
-        // Generate particles on client side to avoid hydration errors
-        const newParticles: Particle[] = Array.from({ length: 30 }).map((_, i) => ({
-            id: i,
-            x: Math.random() * 100, // vw
-            size: Math.random() * 10 + 4, // px
-            duration: Math.random() * 20 + 15, // sec
-            delay: Math.random() * 10,
-        }));
-        setParticles(newParticles);
-    }, []);
+        if (shouldReduceMotion) return; // Do not generate floating particles if reduced motion is preferred
+
+        // Throttled generation to prevent main thread blocking during initial render
+        const animationFrameId = requestAnimationFrame(() => {
+            const newParticles: Particle[] = Array.from({ length: 30 }).map((_, i) => ({
+                id: i,
+                x: Math.random() * 100, // vw
+                y: Math.random() * 100, // vh
+                size: Math.random() * 10 + 4, // px
+                duration: Math.random() * 20 + 15, // sec
+                delay: Math.random() * 10,
+            }));
+            setParticles(newParticles);
+        });
+
+        return () => cancelAnimationFrame(animationFrameId);
+    }, [shouldReduceMotion]);
 
     return (
         <div className="fixed inset-0 pointer-events-none z-[-1] overflow-hidden bg-background">
@@ -32,10 +41,11 @@ export function GoldenParticles() {
             <div className="absolute inset-0 bg-gradient-to-b from-background to-secondary/30 opacity-70" />
 
             {/* Floating Gold Orbs */}
-            {particles.map((p) => (
+            {!shouldReduceMotion && particles.map((p) => (
                 <motion.div
                     key={p.id}
                     className="absolute rounded-full bg-accent blur-[2px] opacity-30"
+                    style={{ willChange: "transform, opacity" }}
                     initial={{
                         x: `${p.x}vw`,
                         y: "110vh",

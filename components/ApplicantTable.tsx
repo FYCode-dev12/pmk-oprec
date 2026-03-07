@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Download, ExternalLink, Eye } from "lucide-react";
 import Papa from "papaparse";
+import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
 
 export interface Submission {
     id: string;
@@ -17,10 +19,21 @@ export interface Submission {
     submitted_at: string;
 }
 
-export function ApplicantTable({ submissions, recruitmentTitle }: { submissions: Submission[]; recruitmentTitle: string }) {
-    const exportToCSV = () => {
+export function ApplicantTable({ submissions, recruitmentTitle, recruitmentId, currentPage = 1, totalPages = 1 }: { submissions: Submission[]; recruitmentTitle: string; recruitmentId: string; currentPage?: number; totalPages?: number; }) {
+    const router = useRouter();
+    const supabase = createClient();
+    const exportToCSV = async () => {
+        // Fetch all submissions for this recruitment
+        const { data: allSubmissions } = await supabase
+            .from("submissions")
+            .select("id, applicant_name, applicant_email, applicant_nim, submitted_at, answers, files")
+            .eq("recruitment_id", recruitmentId)
+            .order("submitted_at", { ascending: false });
+
+        if (!allSubmissions) return;
+
         // Flatten data for CSV
-        const data = submissions.map((sub, i) => {
+        const data = allSubmissions.map((sub, i) => {
             const flat: Record<string, string | number> = {
                 No: i + 1,
                 Nama: sub.applicant_name,
@@ -170,6 +183,31 @@ export function ApplicantTable({ submissions, recruitmentTitle }: { submissions:
                     </TableBody>
                 </Table>
             </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+                <div className="flex items-center justify-end space-x-2 py-4">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => router.push(`/admin/recruitments/${recruitmentId}/applicants?page=${currentPage - 1}`)}
+                        disabled={currentPage <= 1}
+                    >
+                        Previous
+                    </Button>
+                    <div className="text-sm text-muted-foreground font-medium px-4">
+                        Halaman {currentPage} dari {totalPages}
+                    </div>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => router.push(`/admin/recruitments/${recruitmentId}/applicants?page=${currentPage + 1}`)}
+                        disabled={currentPage >= totalPages}
+                    >
+                        Next
+                    </Button>
+                </div>
+            )}
         </div>
     );
 }
